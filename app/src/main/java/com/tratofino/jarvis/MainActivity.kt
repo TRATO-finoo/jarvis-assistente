@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -15,6 +16,12 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -28,6 +35,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private val microphoneRequestCode = 1001
 
+    private val jarvisUrl =
+        "https://jarvis-assistente.netlify.app/.netlify/functions/jarvis"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -35,7 +45,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         textToSpeech = TextToSpeech(this, this)
 
-        if (ContextCompat.checkSelfPermission(
+        if (
+            ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
@@ -48,58 +59,72 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            statusText.text = "Reconhecimento de voz não disponível neste aparelho."
+            statusText.text =
+                "Reconhecimento de voz não disponível neste aparelho."
             talkButton.isEnabled = false
             return
         }
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer =
+            SpeechRecognizer.createSpeechRecognizer(this)
 
-        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+        speechRecognizer?.setRecognitionListener(
+            object : RecognitionListener {
 
-            override fun onReadyForSpeech(params: Bundle?) {
-                statusText.text = "Estou ouvindo..."
-            }
-
-            override fun onBeginningOfSpeech() {
-                statusText.text = "Pode falar..."
-            }
-
-            override fun onRmsChanged(rmsdB: Float) {}
-
-            override fun onBufferReceived(buffer: ByteArray?) {}
-
-            override fun onEndOfSpeech() {
-                statusText.text = "Entendi. Processando..."
-            }
-
-            override fun onError(error: Int) {
-                statusText.text = "Não consegui entender. Tente novamente."
-                talkButton.isEnabled = true
-            }
-
-            override fun onResults(results: Bundle?) {
-
-                val matches = results?.getStringArrayList(
-                    SpeechRecognizer.RESULTS_RECOGNITION
-                )
-
-                val spokenText = matches?.firstOrNull()
-
-                if (!spokenText.isNullOrBlank()) {
-
-                    resultText.text = "Você: $spokenText"
-
-                    processCommand(spokenText)
+                override fun onReadyForSpeech(params: Bundle?) {
+                    statusText.text = "Estou ouvindo..."
                 }
 
-                talkButton.isEnabled = true
+                override fun onBeginningOfSpeech() {
+                    statusText.text = "Pode falar..."
+                }
+
+                override fun onRmsChanged(rmsdB: Float) {}
+
+                override fun onBufferReceived(buffer: ByteArray?) {}
+
+                override fun onEndOfSpeech() {
+                    statusText.text = "Entendi. Processando..."
+                }
+
+                override fun onError(error: Int) {
+                    statusText.text =
+                        "Não consegui entender. Tente novamente."
+
+                    talkButton.isEnabled = true
+                }
+
+                override fun onResults(results: Bundle?) {
+
+                    val matches =
+                        results?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+
+                    val spokenText =
+                        matches?.firstOrNull()
+
+                    if (!spokenText.isNullOrBlank()) {
+
+                        resultText.text =
+                            "Você: $spokenText"
+
+                        processCommand(spokenText)
+                    }
+
+                    talkButton.isEnabled = true
+                }
+
+                override fun onPartialResults(
+                    partialResults: Bundle?
+                ) {}
+
+                override fun onEvent(
+                    eventType: Int,
+                    params: Bundle?
+                ) {}
             }
-
-            override fun onPartialResults(partialResults: Bundle?) {}
-
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
+        )
 
         talkButton.setOnClickListener {
             startListening()
@@ -108,7 +133,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun startListening() {
 
-        if (ContextCompat.checkSelfPermission(
+        if (
+            ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
@@ -125,9 +151,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         talkButton.isEnabled = false
 
-        val intent = Intent(
-            RecognizerIntent.ACTION_RECOGNIZE_SPEECH
-        )
+        val intent =
+            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
 
         intent.putExtra(
             RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -154,29 +179,38 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun processCommand(command: String) {
 
-        val text = command.lowercase(Locale("pt", "BR"))
+        val text =
+            command.lowercase(Locale("pt", "BR"))
 
         when {
 
             text.contains("youtube") -> {
+
                 speak("Abrindo o YouTube.")
                 openUrl("https://www.youtube.com")
             }
 
             text.contains("google") -> {
+
                 speak("Abrindo o Google.")
                 openUrl("https://www.google.com")
             }
 
             text.contains("whatsapp") -> {
+
+                speak("Abrindo o WhatsApp.")
                 openApp("com.whatsapp")
             }
 
             text.contains("instagram") -> {
+
+                speak("Abrindo o Instagram.")
                 openApp("com.instagram.android")
             }
 
             text.contains("facebook") -> {
+
+                speak("Abrindo o Facebook.")
                 openApp("com.facebook.katana")
             }
 
@@ -186,9 +220,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 speak("Abrindo as configurações.")
 
                 startActivity(
-                    Intent(
-                        android.provider.Settings.ACTION_SETTINGS
-                    )
+                    Intent(Settings.ACTION_SETTINGS)
                 )
             }
 
@@ -197,9 +229,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 speak("Abrindo a câmera.")
 
-                val intent = Intent(
-                    android.provider.MediaStore.ACTION_IMAGE_CAPTURE
-                )
+                val intent =
+                    Intent(
+                        android.provider.MediaStore.ACTION_IMAGE_CAPTURE
+                    )
 
                 startActivity(intent)
             }
@@ -209,11 +242,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 speak("Abrindo o telefone.")
 
-                val intent = Intent(
-                    Intent.ACTION_DIAL
+                startActivity(
+                    Intent(Intent.ACTION_DIAL)
                 )
-
-                startActivity(intent)
             }
 
             text.contains("mapa") ||
@@ -221,32 +252,158 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 speak("Abrindo o mapa.")
 
-                val intent = Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("geo:0,0?q=Brasil")
-                )
+                val intent =
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("geo:0,0?q=Brasil")
+                    )
 
                 startActivity(intent)
             }
 
             else -> {
 
-                /*
-                 * Aqui entra a IA avançada.
-                 *
-                 * O aplicativo NÃO deve guardar a chave
-                 * da OpenAI dentro do APK.
-                 *
-                 * Primeiro vamos ligar este ponto ao
-                 * nosso servidor seguro.
-                 */
-
-                speak(
-                    "Entendi você dizer: $command. " +
-                    "Estou preparando minha inteligência avançada."
-                )
+                askJarvis(command)
             }
         }
+    }
+
+    private fun askJarvis(command: String) {
+
+        runOnUiThread {
+
+            statusText.text =
+                "Jarvis: pensando..."
+
+            talkButton.isEnabled = false
+        }
+
+        Thread {
+
+            var connection: HttpURLConnection? = null
+
+            try {
+
+                val url =
+                    URL(jarvisUrl)
+
+                connection =
+                    url.openConnection()
+                            as HttpURLConnection
+
+                connection.requestMethod = "POST"
+
+                connection.connectTimeout = 15000
+
+                connection.readTimeout = 30000
+
+                connection.doOutput = true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                val json =
+                    JSONObject()
+
+                json.put(
+                    "mensagem",
+                    command
+                )
+
+                OutputStreamWriter(
+                    connection.outputStream
+                ).use { writer ->
+
+                    writer.write(
+                        json.toString()
+                    )
+
+                    writer.flush()
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                val inputStream =
+                    if (responseCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+
+                val response =
+                    BufferedReader(
+                        InputStreamReader(
+                            inputStream
+                        )
+                    ).use { reader ->
+
+                        reader.readText()
+                    }
+
+                val responseJson =
+                    JSONObject(response)
+
+                if (responseCode in 200..299) {
+
+                    val resposta =
+                        responseJson.optString(
+                            "resposta",
+                            "Não consegui responder."
+                        )
+
+                    runOnUiThread {
+
+                        resultText.text =
+                            "Você: $command"
+
+                        speak(resposta)
+
+                        talkButton.isEnabled = true
+                    }
+
+                } else {
+
+                    val erro =
+                        responseJson.optString(
+                            "error",
+                            "Erro ao conversar com o servidor."
+                        )
+
+                    runOnUiThread {
+
+                        speak(
+                            "Tive um problema: $erro"
+                        )
+
+                        talkButton.isEnabled = true
+                    }
+                }
+
+            } catch (e: Exception) {
+
+                runOnUiThread {
+
+                    speak(
+                        "Não consegui conectar ao meu servidor."
+                    )
+
+                    talkButton.isEnabled = true
+                }
+
+            } finally {
+
+                connection?.disconnect()
+            }
+
+        }.start()
     }
 
     private fun openApp(packageName: String) {
@@ -254,22 +411,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         try {
 
             val intent =
-                packageManager.getLaunchIntentForPackage(packageName)
+                packageManager.getLaunchIntentForPackage(
+                    packageName
+                )
 
             if (intent != null) {
 
                 startActivity(intent)
 
-                speak("Abrindo.")
-
             } else {
 
-                speak("Esse aplicativo não está instalado.")
+                speak(
+                    "Esse aplicativo não está instalado."
+                )
             }
 
         } catch (e: Exception) {
 
-            speak("Não consegui abrir esse aplicativo.")
+            speak(
+                "Não consegui abrir esse aplicativo."
+            )
         }
     }
 
@@ -277,29 +438,35 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         try {
 
-            val intent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse(url)
+            startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(url)
+                )
             )
-
-            startActivity(intent)
 
         } catch (e: Exception) {
 
-            speak("Não consegui abrir esse endereço.")
+            speak(
+                "Não consegui abrir esse endereço."
+            )
         }
     }
 
     private fun speak(text: String) {
 
-        statusText.text = "Jarvis: $text"
+        runOnUiThread {
 
-        textToSpeech.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            "JARVIS_RESPONSE"
-        )
+            statusText.text =
+                "Jarvis: $text"
+
+            textToSpeech.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "JARVIS_RESPONSE"
+            )
+        }
     }
 
     override fun onInit(status: Int) {
@@ -313,7 +480,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun createInterface(): LinearLayout {
 
-        val layout = LinearLayout(this)
+        val layout =
+            LinearLayout(this)
 
         layout.orientation =
             LinearLayout.VERTICAL
@@ -325,26 +493,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             40
         )
 
-        statusText = TextView(this)
+        statusText =
+            TextView(this)
 
         statusText.text =
             "Jarvis: pronto para ouvir."
 
-        statusText.textSize = 22f
+        statusText.textSize =
+            22f
 
-        resultText = TextView(this)
+        resultText =
+            TextView(this)
 
         resultText.text =
             "Fale comigo."
 
-        resultText.textSize = 18f
+        resultText.textSize =
+            18f
 
-        talkButton = Button(this)
+        talkButton =
+            Button(this)
 
         talkButton.text =
             "🎤 FALAR COM JARVIS"
 
-        talkButton.textSize = 18f
+        talkButton.textSize =
+            18f
 
         layout.addView(
             statusText,
@@ -378,6 +552,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         speechRecognizer?.destroy()
 
         textToSpeech.stop()
+
         textToSpeech.shutdown()
 
         super.onDestroy()
