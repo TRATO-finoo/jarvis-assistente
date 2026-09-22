@@ -1,24 +1,26 @@
 export default async (req) => {
+  const headers = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
-      }
+      headers
     });
   }
 
   if (req.method !== "POST") {
     return new Response(
-      JSON.stringify({ error: "Método não permitido." }),
+      JSON.stringify({
+        error: "Método não permitido. Use POST."
+      }),
       {
         status: 405,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
+        headers
       }
     );
   }
@@ -29,13 +31,12 @@ export default async (req) => {
 
     if (!mensagem || typeof mensagem !== "string") {
       return new Response(
-        JSON.stringify({ error: "Mensagem não enviada." }),
+        JSON.stringify({
+          error: "Mensagem não enviada."
+        }),
         {
           status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
+          headers
         }
       );
     }
@@ -45,14 +46,11 @@ export default async (req) => {
     if (!apiKey) {
       return new Response(
         JSON.stringify({
-          error: "OPENAI_API_KEY ainda não foi configurada no Netlify."
+          error: "A variável OPENAI_API_KEY não está disponível no Netlify."
         }),
         {
           status: 500,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
+          headers
         }
       );
     }
@@ -61,18 +59,24 @@ export default async (req) => {
       "https://api.openai.com/v1/responses",
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
+
         body: JSON.stringify({
           model: "gpt-5.6-sol",
+
           instructions:
             "Você é Jarvis, um assistente pessoal inteligente. " +
             "Responda sempre em português do Brasil. " +
-            "Seja natural, inteligente, útil e objetivo. " +
-            "Não invente informações.",
+            "Seja natural, útil, inteligente e objetivo. " +
+            "Não invente informações. " +
+            "Quando não souber algo, diga claramente.",
+
           input: mensagem,
+
           max_output_tokens: 1200
         })
       }
@@ -85,14 +89,12 @@ export default async (req) => {
         JSON.stringify({
           error:
             dados?.error?.message ||
-            "A OpenAI retornou um erro."
+            `A OpenAI retornou o código HTTP ${resposta.status}.`,
+          status_openai: resposta.status
         }),
         {
-          status: resposta.status,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
+          status: 502,
+          headers
         }
       );
     }
@@ -115,31 +117,28 @@ export default async (req) => {
     }
 
     if (!texto) {
-      texto = "Não consegui gerar uma resposta.";
+      texto = "A OpenAI respondeu, mas não retornou texto.";
     }
 
     return new Response(
-      JSON.stringify({ resposta: texto }),
+      JSON.stringify({
+        resposta: texto
+      }),
       {
         status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
+        headers
       }
     );
 
   } catch (erro) {
+
     return new Response(
       JSON.stringify({
-        error: "Erro interno no servidor."
+        error: `Erro interno: ${erro?.message || "erro desconhecido"}`
       }),
       {
         status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
+        headers
       }
     );
   }
