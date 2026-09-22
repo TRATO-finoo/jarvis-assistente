@@ -1,5 +1,4 @@
 export default async (req) => {
-  // Permite o aplicativo conversar com a função
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -13,9 +12,7 @@ export default async (req) => {
 
   if (req.method !== "POST") {
     return new Response(
-      JSON.stringify({
-        error: "Método não permitido."
-      }),
+      JSON.stringify({ error: "Método não permitido." }),
       {
         status: 405,
         headers: {
@@ -28,14 +25,11 @@ export default async (req) => {
 
   try {
     const body = await req.json();
-
     const mensagem = body?.mensagem;
 
     if (!mensagem || typeof mensagem !== "string") {
       return new Response(
-        JSON.stringify({
-          error: "Mensagem não enviada."
-        }),
+        JSON.stringify({ error: "Mensagem não enviada." }),
         {
           status: 400,
           headers: {
@@ -67,25 +61,18 @@ export default async (req) => {
       "https://api.openai.com/v1/responses",
       {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
-
         body: JSON.stringify({
           model: "gpt-5.6-sol",
-
           instructions:
             "Você é Jarvis, um assistente pessoal inteligente. " +
             "Responda sempre em português do Brasil. " +
-            "Entenda o contexto da conversa. " +
             "Seja natural, inteligente, útil e objetivo. " +
-            "Não invente informações. " +
-            "Quando não souber algo, diga claramente.",
-
+            "Não invente informações.",
           input: mensagem,
-
           max_output_tokens: 1200
         })
       }
@@ -118,4 +105,42 @@ export default async (req) => {
           for (const content of item.content) {
             if (
               content?.type === "output_text" &&
-              typeof content?.text === "string
+              typeof content?.text === "string"
+            ) {
+              texto += content.text;
+            }
+          }
+        }
+      }
+    }
+
+    if (!texto) {
+      texto = "Não consegui gerar uma resposta.";
+    }
+
+    return new Response(
+      JSON.stringify({ resposta: texto }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
+      }
+    );
+
+  } catch (erro) {
+    return new Response(
+      JSON.stringify({
+        error: "Erro interno no servidor."
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
+      }
+    );
+  }
+};
