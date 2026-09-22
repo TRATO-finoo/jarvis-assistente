@@ -1,8 +1,13 @@
 package com.tratofino.jarvis
 
 import android.Manifest
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -10,8 +15,14 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
-import android.widget.Button
+import android.speech.tts.UtteranceProgressListener
+import android.view.Gravity
+import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -26,12 +37,19 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
+    private lateinit var orb: TextView
     private lateinit var statusText: TextView
-    private lateinit var resultText: TextView
-    private lateinit var talkButton: Button
+    private lateinit var conversation: LinearLayout
+    private lateinit var input: EditText
+    private lateinit var micButton: TextView
+    private lateinit var continuousButton: TextView
 
     private var speechRecognizer: SpeechRecognizer? = null
     private lateinit var textToSpeech: TextToSpeech
+
+    private var continuousMode = false
+    private var isSpeaking = false
+    private var orbAnimator: ObjectAnimator? = null
 
     private val microphoneRequestCode = 1001
 
@@ -58,59 +76,395 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             )
         }
 
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+        setupSpeechRecognizer()
+
+        micButton.setOnClickListener {
+            startListening()
+        }
+
+        continuousButton.setOnClickListener {
+            continuousMode = !continuousMode
+            updateContinuousButton()
+
+            if (continuousMode) {
+                statusText.text = "Modo contínuo ativado"
+                startListening()
+            } else {
+                speechRecognizer?.stopListening()
+                stopOrbAnimation()
+                statusText.text = "Pronto para conversar"
+            }
+        }
+    }
+
+    private fun createInterface(): View {
+
+        val root = LinearLayout(this)
+
+        root.orientation = LinearLayout.VERTICAL
+        root.setPadding(20, 28, 20, 18)
+        root.setBackgroundColor(Color.rgb(7, 9, 14))
+
+        val title = TextView(this)
+
+        title.text = "JARVIS"
+        title.textSize = 25f
+        title.setTextColor(Color.WHITE)
+        title.typeface = Typeface.DEFAULT_BOLD
+        title.gravity = Gravity.CENTER
+
+        root.addView(
+            title,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                45
+            )
+        )
+
+        val subtitle = TextView(this)
+
+        subtitle.text = "Seu assistente pessoal"
+        subtitle.textSize = 14f
+        subtitle.setTextColor(Color.rgb(145, 153, 170))
+        subtitle.gravity = Gravity.CENTER
+
+        root.addView(
+            subtitle,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                30
+            )
+        )
+
+        val orbContainer = FrameLayout(this)
+
+        orb = TextView(this)
+
+        orb.text = "J"
+        orb.textSize = 40f
+        orb.gravity = Gravity.CENTER
+        orb.setTextColor(Color.WHITE)
+        orb.typeface = Typeface.DEFAULT_BOLD
+
+        orb.background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(
+                Color.rgb(65, 170, 255),
+                Color.rgb(30, 105, 235),
+                Color.rgb(12, 42, 125)
+            )
+        ).apply {
+            shape = GradientDrawable.OVAL
+        }
+
+        orbContainer.addView(
+            orb,
+            FrameLayout.LayoutParams(
+                175,
+                175,
+                Gravity.CENTER
+            )
+        )
+
+        root.addView(
+            orbContainer,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                210
+            )
+        )
+
+        statusText = TextView(this)
+
+        statusText.text = "Pronto para conversar"
+        statusText.textSize = 15f
+        statusText.setTextColor(Color.rgb(180, 188, 205))
+        statusText.gravity = Gravity.CENTER
+
+        root.addView(
+            statusText,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                40
+            )
+        )
+
+        val scrollView = ScrollView(this)
+
+        conversation = LinearLayout(this)
+
+        conversation.orientation =
+            LinearLayout.VERTICAL
+
+        conversation.setPadding(
+            4,
+            10,
+            4,
+            10
+        )
+
+        scrollView.addView(conversation)
+
+        root.addView(
+            scrollView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        continuousButton = TextView(this)
+
+        continuousButton.text =
+            "◉  Modo contínuo: DESLIGADO"
+
+        continuousButton.textSize = 14f
+        continuousButton.gravity = Gravity.CENTER
+        continuousButton.setTextColor(Color.WHITE)
+
+        continuousButton.background =
+            roundedBackground(
+                Color.rgb(24, 29, 40),
+                30f
+            )
+
+        root.addView(
+            continuousButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                52
+            )
+        )
+
+        val composer = LinearLayout(this)
+
+        composer.gravity =
+            Gravity.CENTER_VERTICAL
+
+        composer.setPadding(
+            0,
+            10,
+            0,
+            0
+        )
+
+        input = EditText(this)
+
+        input.hint =
+            "Mensagem para o Jarvis..."
+
+        input.setHintTextColor(
+            Color.rgb(120, 128, 145)
+        )
+
+        input.setTextColor(Color.WHITE)
+
+        input.textSize = 16f
+
+        input.maxLines = 3
+
+        input.background =
+            roundedBackground(
+                Color.rgb(24, 29, 40),
+                28f
+            )
+
+        input.setPadding(
+            20,
+            8,
+            15,
+            8
+        )
+
+        composer.addView(
+            input,
+            LinearLayout.LayoutParams(
+                0,
+                58,
+                1f
+            )
+        )
+
+        micButton = TextView(this)
+
+        micButton.text = "🎙"
+
+        micButton.textSize = 24f
+        micButton.gravity = Gravity.CENTER
+        micButton.setTextColor(Color.WHITE)
+
+        micButton.background =
+            roundedBackground(
+                Color.rgb(30, 110, 235),
+                60f
+            )
+
+        composer.addView(
+            micButton,
+            LinearLayout.LayoutParams(
+                58,
+                58
+            ).apply {
+                setMargins(8, 0, 0, 0)
+            }
+        )
+
+        val sendButton = TextView(this)
+
+        sendButton.text = "➤"
+
+        sendButton.textSize = 23f
+        sendButton.gravity = Gravity.CENTER
+        sendButton.setTextColor(Color.WHITE)
+
+        sendButton.background =
+            roundedBackground(
+                Color.rgb(18, 70, 165),
+                60f
+            )
+
+        sendButton.setOnClickListener {
+
+            val message =
+                input.text.toString().trim()
+
+            if (message.isNotEmpty()) {
+
+                addMessage(
+                    "Você",
+                    message
+                )
+
+                input.text.clear()
+
+                processCommand(message)
+            }
+        }
+
+        composer.addView(
+            sendButton,
+            LinearLayout.LayoutParams(
+                58,
+                58
+            ).apply {
+                setMargins(8, 0, 0, 0)
+            }
+        )
+
+        root.addView(composer)
+
+        return root
+    }
+
+    private fun setupSpeechRecognizer() {
+
+        if (
+            !SpeechRecognizer.isRecognitionAvailable(
+                this
+            )
+        ) {
+
             statusText.text =
-                "Reconhecimento de voz não disponível."
-            talkButton.isEnabled = false
+                "Reconhecimento de voz indisponível."
+
             return
         }
 
         speechRecognizer =
-            SpeechRecognizer.createSpeechRecognizer(this)
+            SpeechRecognizer.createSpeechRecognizer(
+                this
+            )
 
         speechRecognizer?.setRecognitionListener(
             object : RecognitionListener {
 
-                override fun onReadyForSpeech(params: Bundle?) {
-                    statusText.text = "Estou ouvindo..."
+                override fun onReadyForSpeech(
+                    params: Bundle?
+                ) {
+
+                    statusText.text =
+                        "Ouvindo..."
+
+                    startOrbAnimation()
                 }
 
                 override fun onBeginningOfSpeech() {
-                    statusText.text = "Pode falar..."
+
+                    statusText.text =
+                        "Pode falar..."
                 }
 
-                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onRmsChanged(
+                    rmsdB: Float
+                ) {}
 
-                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onBufferReceived(
+                    buffer: ByteArray?
+                ) {}
 
                 override fun onEndOfSpeech() {
-                    statusText.text = "Entendi. Processando..."
-                }
 
-                override fun onError(error: Int) {
                     statusText.text =
-                        "Não consegui entender. Tente novamente."
-                    talkButton.isEnabled = true
+                        "Processando..."
                 }
 
-                override fun onResults(results: Bundle?) {
+                override fun onError(
+                    error: Int
+                ) {
 
-                    val matches =
-                        results?.getStringArrayList(
-                            SpeechRecognizer.RESULTS_RECOGNITION
+                    stopOrbAnimation()
+
+                    statusText.text =
+                        "Não consegui entender."
+
+                    if (
+                        continuousMode &&
+                        !isSpeaking
+                    ) {
+
+                        orb.postDelayed(
+                            {
+                                startListening()
+                            },
+                            700
                         )
+                    }
+                }
+
+                override fun onResults(
+                    results: Bundle?
+                ) {
+
+                    stopOrbAnimation()
 
                     val spokenText =
-                        matches?.firstOrNull()
+                        results
+                            ?.getStringArrayList(
+                                SpeechRecognizer.RESULTS_RECOGNITION
+                            )
+                            ?.firstOrNull()
 
-                    if (!spokenText.isNullOrBlank()) {
-                        resultText.text =
-                            "Você: $spokenText"
+                    if (
+                        !spokenText.isNullOrBlank()
+                    ) {
 
-                        processCommand(spokenText)
+                        addMessage(
+                            "Você",
+                            spokenText
+                        )
+
+                        processCommand(
+                            spokenText
+                        )
+
+                    } else if (
+                        continuousMode &&
+                        !isSpeaking
+                    ) {
+
+                        startListening()
                     }
-
-                    talkButton.isEnabled = true
                 }
 
                 override fun onPartialResults(
@@ -123,10 +477,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 ) {}
             }
         )
-
-        talkButton.setOnClickListener {
-            startListening()
-        }
     }
 
     private fun startListening() {
@@ -137,18 +487,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
+
             ActivityCompat.requestPermissions(
                 this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
+                arrayOf(
+                    Manifest.permission.RECORD_AUDIO
+                ),
                 microphoneRequestCode
             )
+
             return
         }
 
-        talkButton.isEnabled = false
-
         val intent =
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            Intent(
+                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+            )
 
         intent.putExtra(
             RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -170,59 +524,102 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             "Fale com o Jarvis"
         )
 
-        speechRecognizer?.startListening(intent)
+        speechRecognizer?.startListening(
+            intent
+        )
     }
 
-    private fun processCommand(command: String) {
+    private fun processCommand(
+        command: String
+    ) {
 
         val text =
-            command.lowercase(Locale("pt", "BR"))
+            command.lowercase(
+                Locale("pt", "BR")
+            )
 
         when {
 
             text.contains("youtube") -> {
-                speak("Abrindo o YouTube.")
-                openUrl("https://www.youtube.com")
+
+                speak(
+                    "Abrindo o YouTube."
+                )
+
+                openUrl(
+                    "https://www.youtube.com"
+                )
             }
 
             text.contains("google") -> {
-                speak("Abrindo o Google.")
-                openUrl("https://www.google.com")
+
+                speak(
+                    "Abrindo o Google."
+                )
+
+                openUrl(
+                    "https://www.google.com"
+                )
             }
 
             text.contains("whatsapp") -> {
-                speak("Abrindo o WhatsApp.")
-                openApp("com.whatsapp")
+
+                speak(
+                    "Abrindo o WhatsApp."
+                )
+
+                openApp(
+                    "com.whatsapp"
+                )
             }
 
             text.contains("instagram") -> {
-                speak("Abrindo o Instagram.")
-                openApp("com.instagram.android")
+
+                speak(
+                    "Abrindo o Instagram."
+                )
+
+                openApp(
+                    "com.instagram.android"
+                )
             }
 
             text.contains("facebook") -> {
-                speak("Abrindo o Facebook.")
-                openApp("com.facebook.katana")
+
+                speak(
+                    "Abrindo o Facebook."
+                )
+
+                openApp(
+                    "com.facebook.katana"
+                )
             }
 
             text.contains("configurações") ||
             text.contains("configuração") -> {
 
-                speak("Abrindo as configurações.")
+                speak(
+                    "Abrindo as configurações."
+                )
 
                 startActivity(
-                    Intent(Settings.ACTION_SETTINGS)
+                    Intent(
+                        Settings.ACTION_SETTINGS
+                    )
                 )
             }
 
             text.contains("câmera") ||
             text.contains("camera") -> {
 
-                speak("Abrindo a câmera.")
+                speak(
+                    "Abrindo a câmera."
+                )
 
                 startActivity(
                     Intent(
-                        android.provider.MediaStore.ACTION_IMAGE_CAPTURE
+                        android.provider.MediaStore
+                            .ACTION_IMAGE_CAPTURE
                     )
                 )
             }
@@ -230,54 +627,76 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             text.contains("telefone") ||
             text.contains("ligar") -> {
 
-                speak("Abrindo o telefone.")
+                speak(
+                    "Abrindo o telefone."
+                )
 
                 startActivity(
-                    Intent(Intent.ACTION_DIAL)
+                    Intent(
+                        Intent.ACTION_DIAL
+                    )
                 )
             }
 
             text.contains("mapa") ||
             text.contains("maps") -> {
 
-                speak("Abrindo o mapa.")
+                speak(
+                    "Abrindo o mapa."
+                )
 
                 startActivity(
                     Intent(
                         Intent.ACTION_VIEW,
-                        Uri.parse("geo:0,0?q=Brasil")
+                        Uri.parse(
+                            "geo:0,0?q=Brasil"
+                        )
                     )
                 )
             }
 
             else -> {
+
                 askJarvis(command)
             }
         }
     }
 
-    private fun askJarvis(command: String) {
+    private fun askJarvis(
+        command: String
+    ) {
 
         runOnUiThread {
-            statusText.text = "Jarvis: conectando..."
-            talkButton.isEnabled = false
+
+            statusText.text =
+                "Jarvis está pensando..."
+
+            startOrbAnimation()
         }
 
         Thread {
 
-            var connection: HttpURLConnection? = null
+            var connection:
+                HttpURLConnection? = null
 
             try {
 
-                val url = URL(jarvisUrl)
-
                 connection =
-                    url.openConnection() as HttpURLConnection
+                    URL(jarvisUrl)
+                        .openConnection()
+                            as HttpURLConnection
 
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 15000
-                connection.readTimeout = 30000
-                connection.doOutput = true
+                connection.requestMethod =
+                    "POST"
+
+                connection.connectTimeout =
+                    15000
+
+                connection.readTimeout =
+                    30000
+
+                connection.doOutput =
+                    true
 
                 connection.setRequestProperty(
                     "Content-Type",
@@ -289,7 +708,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     "application/json"
                 )
 
-                val json = JSONObject()
+                val json =
+                    JSONObject()
 
                 json.put(
                     "mensagem",
@@ -299,66 +719,74 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 OutputStreamWriter(
                     connection.outputStream
                 ).use { writer ->
-                    writer.write(json.toString())
+
+                    writer.write(
+                        json.toString()
+                    )
+
                     writer.flush()
                 }
 
                 val responseCode =
                     connection.responseCode
 
-                val inputStream =
-                    if (responseCode in 200..299) {
+                val stream =
+                    if (
+                        responseCode in 200..299
+                    ) {
+
                         connection.inputStream
+
                     } else {
+
                         connection.errorStream
                     }
 
                 val response =
                     BufferedReader(
-                        InputStreamReader(inputStream)
-                    ).use { reader ->
-                        reader.readText()
+                        InputStreamReader(
+                            stream
+                        )
+                    ).use {
+
+                        it.readText()
                     }
 
                 val responseJson =
                     JSONObject(response)
 
-                if (responseCode in 200..299) {
+                runOnUiThread {
 
-                    val resposta =
-                        responseJson.optString(
-                            "resposta",
-                            "O servidor respondeu sem texto."
+                    stopOrbAnimation()
+
+                    if (
+                        responseCode in 200..299
+                    ) {
+
+                        val answer =
+                            responseJson.optString(
+                                "resposta",
+                                "Não consegui gerar uma resposta."
+                            )
+
+                        speak(answer)
+
+                    } else {
+
+                        val error =
+                            responseJson.optString(
+                                "error",
+                                "Erro desconhecido no servidor."
+                            )
+
+                        addMessage(
+                            "Sistema",
+                            "Erro do servidor: $error"
                         )
-
-                    runOnUiThread {
-
-                        resultText.text =
-                            "Você: $command"
-
-                        speak(resposta)
-
-                        talkButton.isEnabled = true
-                    }
-
-                } else {
-
-                    val erro =
-                        responseJson.optString(
-                            "error",
-                            "Erro desconhecido no servidor."
-                        )
-
-                    runOnUiThread {
-
-                        resultText.text =
-                            "Erro do servidor: $erro"
 
                         speak(
                             "O servidor respondeu com um erro."
                         )
-
-                        talkButton.isEnabled = true
                     }
                 }
 
@@ -366,14 +794,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 runOnUiThread {
 
-                    resultText.text =
-                        "Erro de conexão: ${e.message}"
+                    stopOrbAnimation()
+
+                    addMessage(
+                        "Sistema",
+                        "Erro de conexão: " +
+                            (e.message
+                                ?: "erro desconhecido")
+                    )
 
                     speak(
                         "Ocorreu um erro de conexão."
                     )
-
-                    talkButton.isEnabled = true
                 }
 
             } finally {
@@ -384,135 +816,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }.start()
     }
 
-    private fun openApp(packageName: String) {
-
-        try {
-
-            val intent =
-                packageManager.getLaunchIntentForPackage(
-                    packageName
-                )
-
-            if (intent != null) {
-                startActivity(intent)
-            } else {
-                speak("Esse aplicativo não está instalado.")
-            }
-
-        } catch (e: Exception) {
-            speak("Não consegui abrir esse aplicativo.")
-        }
-    }
-
-    private fun openUrl(url: String) {
-
-        try {
-
-            startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse(url)
-                )
-            )
-
-        } catch (e: Exception) {
-            speak("Não consegui abrir esse endereço.")
-        }
-    }
-
-    private fun speak(text: String) {
+    private fun speak(
+        text: String
+    ) {
 
         runOnUiThread {
 
             statusText.text =
-                "Jarvis: $text"
+                "Jarvis está falando..."
 
-            textToSpeech.speak(
-                text,
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                "JARVIS_RESPONSE"
-            )
-        }
-    }
+            isSpeaking = true
 
-    override fun onInit(status: Int) {
+            startOrbAnimation()
 
-        if (status == TextToSpeech.SUCCESS) {
-            textToSpeech.language =
-                Locale("pt", "BR")
-        }
-    }
-
-    private fun createInterface(): LinearLayout {
-
-        val layout = LinearLayout(this)
-
-        layout.orientation =
-            LinearLayout.VERTICAL
-
-        layout.setPadding(
-            40,
-            80,
-            40,
-            40
-        )
-
-        statusText = TextView(this)
-
-        statusText.text =
-            "Jarvis: pronto para ouvir."
-
-        statusText.textSize = 22f
-
-        resultText = TextView(this)
-
-        resultText.text =
-            "Fale comigo."
-
-        resultText.textSize = 18f
-
-        talkButton = Button(this)
-
-        talkButton.text =
-            "🎤 FALAR COM JARVIS"
-
-        talkButton.textSize = 18f
-
-        layout.addView(
-            statusText,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        layout.addView(
-            resultText,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        layout.addView(
-            talkButton,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        return layout
-    }
-
-    override fun onDestroy() {
-
-        speechRecognizer?.destroy()
-
-        textToSpeech.stop()
-        textToSpeech.shutdown()
-
-        super.onDestroy()
-    }
-}
+            addMessage(
+ 
