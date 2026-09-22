@@ -3,12 +3,14 @@ package com.tratofino.jarvis
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -32,6 +34,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(createInterface())
 
         textToSpeech = TextToSpeech(this, this)
+
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                microphoneRequestCode
+            )
+        }
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             statusText.text = "Reconhecimento de voz não disponível neste aparelho."
@@ -65,15 +79,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             override fun onResults(results: Bundle?) {
-                val matches =
-                    results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+
+                val matches = results?.getStringArrayList(
+                    SpeechRecognizer.RESULTS_RECOGNITION
+                )
 
                 val spokenText = matches?.firstOrNull()
 
                 if (!spokenText.isNullOrBlank()) {
+
                     resultText.text = "Você: $spokenText"
 
-                    respondToUser(spokenText)
+                    processCommand(spokenText)
                 }
 
                 talkButton.isEnabled = true
@@ -89,33 +106,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun createInterface(): android.view.View {
-
-        val layout = android.widget.LinearLayout(this)
-
-        layout.orientation = android.widget.LinearLayout.VERTICAL
-        layout.setPadding(40, 60, 40, 40)
-
-        statusText = TextView(this)
-        statusText.text = "Olá! Eu sou o Jarvis."
-        statusText.textSize = 26f
-
-        resultText = TextView(this)
-        resultText.text = "Fale comigo."
-        resultText.textSize = 20f
-        resultText.setPadding(0, 40, 0, 40)
-
-        talkButton = Button(this)
-        talkButton.text = "🎤 FALAR COM JARVIS"
-        talkButton.textSize = 18f
-
-        layout.addView(statusText)
-        layout.addView(resultText)
-        layout.addView(talkButton)
-
-        return layout
-    }
-
     private fun startListening() {
 
         if (ContextCompat.checkSelfPermission(
@@ -123,15 +113,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
+
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.RECORD_AUDIO),
                 microphoneRequestCode
             )
+
             return
         }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        talkButton.isEnabled = false
+
+        val intent = Intent(
+            RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+        )
 
         intent.putExtra(
             RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -144,79 +140,245 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
 
         intent.putExtra(
+            RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
+            "pt-BR"
+        )
+
+        intent.putExtra(
             RecognizerIntent.EXTRA_PROMPT,
             "Fale com o Jarvis"
         )
 
-        talkButton.isEnabled = false
         speechRecognizer?.startListening(intent)
     }
 
-    private fun respondToUser(text: String) {
+    private fun processCommand(command: String) {
 
-        val normalized = text.lowercase(Locale.getDefault())
+        val text = command.lowercase(Locale("pt", "BR"))
 
-        val response = when {
-            normalized.contains("oi") ||
-            normalized.contains("olá") -> {
-                "Olá! Estou aqui. Como posso ajudar você?"
+        when {
+
+            text.contains("youtube") -> {
+                speak("Abrindo o YouTube.")
+                openUrl("https://www.youtube.com")
             }
 
-            normalized.contains("quem é você") -> {
-                "Eu sou o Jarvis, seu assistente pessoal."
+            text.contains("google") -> {
+                speak("Abrindo o Google.")
+                openUrl("https://www.google.com")
             }
 
-            normalized.contains("como você está") -> {
-                "Estou funcionando e pronto para ajudar."
+            text.contains("whatsapp") -> {
+                openApp("com.whatsapp")
+            }
+
+            text.contains("instagram") -> {
+                openApp("com.instagram.android")
+            }
+
+            text.contains("facebook") -> {
+                openApp("com.facebook.katana")
+            }
+
+            text.contains("configurações") ||
+            text.contains("configuração") -> {
+
+                speak("Abrindo as configurações.")
+
+                startActivity(
+                    Intent(
+                        android.provider.Settings.ACTION_SETTINGS
+                    )
+                )
+            }
+
+            text.contains("câmera") ||
+            text.contains("camera") -> {
+
+                speak("Abrindo a câmera.")
+
+                val intent = Intent(
+                    android.provider.MediaStore.ACTION_IMAGE_CAPTURE
+                )
+
+                startActivity(intent)
+            }
+
+            text.contains("telefone") ||
+            text.contains("ligar") -> {
+
+                speak("Abrindo o telefone.")
+
+                val intent = Intent(
+                    Intent.ACTION_DIAL
+                )
+
+                startActivity(intent)
+            }
+
+            text.contains("mapa") ||
+            text.contains("maps") -> {
+
+                speak("Abrindo o mapa.")
+
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("geo:0,0?q=Brasil")
+                )
+
+                startActivity(intent)
             }
 
             else -> {
-                "Entendi você dizer: $text. Ainda estou aprendendo novas funções."
+
+                /*
+                 * Aqui entra a IA avançada.
+                 *
+                 * O aplicativo NÃO deve guardar a chave
+                 * da OpenAI dentro do APK.
+                 *
+                 * Primeiro vamos ligar este ponto ao
+                 * nosso servidor seguro.
+                 */
+
+                speak(
+                    "Entendi você dizer: $command. " +
+                    "Estou preparando minha inteligência avançada."
+                )
             }
         }
+    }
 
-        statusText.text = "Jarvis:"
-        resultText.text = response
+    private fun openApp(packageName: String) {
 
-        speak(response)
+        try {
+
+            val intent =
+                packageManager.getLaunchIntentForPackage(packageName)
+
+            if (intent != null) {
+
+                startActivity(intent)
+
+                speak("Abrindo.")
+
+            } else {
+
+                speak("Esse aplicativo não está instalado.")
+            }
+
+        } catch (e: Exception) {
+
+            speak("Não consegui abrir esse aplicativo.")
+        }
+    }
+
+    private fun openUrl(url: String) {
+
+        try {
+
+            val intent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(url)
+            )
+
+            startActivity(intent)
+
+        } catch (e: Exception) {
+
+            speak("Não consegui abrir esse endereço.")
+        }
     }
 
     private fun speak(text: String) {
 
-        if (::textToSpeech.isInitialized) {
-            textToSpeech.speak(
-                text,
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                "jarvis-response"
-            )
-        }
+        statusText.text = "Jarvis: $text"
+
+        textToSpeech.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "JARVIS_RESPONSE"
+        )
     }
 
     override fun onInit(status: Int) {
 
         if (status == TextToSpeech.SUCCESS) {
 
-            val result = textToSpeech.setLanguage(
+            textToSpeech.language =
                 Locale("pt", "BR")
-            )
-
-            if (result == TextToSpeech.LANG_MISSING_DATA ||
-                result == TextToSpeech.LANG_NOT_SUPPORTED
-            ) {
-                statusText.text = "Voz em português não disponível."
-            }
         }
+    }
+
+    private fun createInterface(): LinearLayout {
+
+        val layout = LinearLayout(this)
+
+        layout.orientation =
+            LinearLayout.VERTICAL
+
+        layout.setPadding(
+            40,
+            80,
+            40,
+            40
+        )
+
+        statusText = TextView(this)
+
+        statusText.text =
+            "Jarvis: pronto para ouvir."
+
+        statusText.textSize = 22f
+
+        resultText = TextView(this)
+
+        resultText.text =
+            "Fale comigo."
+
+        resultText.textSize = 18f
+
+        talkButton = Button(this)
+
+        talkButton.text =
+            "🎤 FALAR COM JARVIS"
+
+        talkButton.textSize = 18f
+
+        layout.addView(
+            statusText,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        layout.addView(
+            resultText,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        layout.addView(
+            talkButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        return layout
     }
 
     override fun onDestroy() {
 
         speechRecognizer?.destroy()
 
-        if (::textToSpeech.isInitialized) {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
+        textToSpeech.stop()
+        textToSpeech.shutdown()
 
         super.onDestroy()
     }
